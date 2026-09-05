@@ -24,7 +24,7 @@
 ## 📦 安装（WorkBuddy）
 
 ```bash
-git clone https://github.com/<你的用户名>/c-drive-deep-clean.git \
+git clone https://github.com/betterzhu6-glitch/c-drive-deep-clean.git \
   ~/.workbuddy/skills/c-drive-deep-clean
 ```
 
