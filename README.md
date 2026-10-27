@@ -1,47 +1,42 @@
-# C盘深度清理与空间迁移 Skill (c-drive-deep-clean)
+# C 盘清理与空间迁移 Skill
 
-一个为 [WorkBuddy](https://www.workbuddy.cn) / Claude Code 类 Agent 设计的 **Windows C 盘深度清理 Skill**。
+为 Codex、WorkBuddy 等支持 `SKILL.md` 的 Windows Agent 提供占用扫描、旧缓存备份清理及目录迁移指导。
 
-实战验证：2026-09-05 单日将一块 156 GB 的 C 盘从**可用 0.03 GB** 清理到**可用 36.43 GB**（释放约 36 GB），全程零数据丢失。
+## 使用
 
-## ✨ 能力
+将此仓库放入 Agent 的 skills 目录，或在对话中指定仓库路径并要求读取 [SKILL.md](SKILL.md)。需要 Python 3.10+；缓存清理脚本需要 PowerShell 7。
 
-| 阶段 | 内容 |
-|------|------|
-| 扫描盘点 | 各盘总览、顶层目录占用（正确跳过 junction/无权限目录）、大文件排行 |
-| 分类清单 | A 类（可直接删的垃圾）/ B 类（可迁移的大文件）/ C 类（不能手动动的系统目录） |
-| 备份删除 | robocopy 先备份到其他盘，文件数 + 字节数双校验一致后才删源 |
-| Junction 迁移 | iPhone 备份、Lumion 素材库等迁到其他盘后建目录联接，iTunes / Lumion 照常使用 |
-| 隐藏空间回收 | 排查「删了文件空间没涨」的元凶（VSS 卷影副本 / 回收站 / 保留存储），提权回收 |
-| 空间对账 | 可见文件字节数 vs 磁盘已用字节数，精确定位隐藏占用 |
-
-## 🧰 核心脚本
-
-- `scripts/scan_disk.py` — 精确全盘扫描，跳过 reparse point，输出可见文件账目
-- `scripts/admin_diag.py` — 管理员诊断：VSS 卷影占用、回收站真实大小、保留存储
-- `scripts/recycle_purge.py` — 提权清空指定盘回收站（绕过普通权限的"空回收站"假象）
-
-## 📦 安装（WorkBuddy）
-
-```bash
-git clone https://github.com/betterzhu6-glitch/c-drive-deep-clean.git \
-  ~/.workbuddy/skills/c-drive-deep-clean
+```powershell
+python -X utf8 scripts/scan_disk.py C: --json E:\cleanup-reports\scan.json
+./scripts/safe_cleanup.ps1 -ReportDirectory E:\cleanup-reports\audit-001
 ```
 
-克隆到 `~/.workbuddy/skills/` 后即可在任意对话中用自然语言唤起，例如：
+两条命令都不删除源文件。核对预览清单后，按 SKILL.md 中的 Apply 示例执行备份式清理。
 
-> "C 盘满了，按流程清理"
-> "帮我把 iPhone 备份迁到 E 盘，iTunes 还要能用"
+## 脚本
 
-## ⚠️ 安全设计
+| 脚本 | 行为 |
+|---|---|
+| `scan_disk.py` | 统计可见文件逻辑长度、最大文件，记录错误并跳过 reparse point；支持 JSON |
+| `safe_cleanup.ps1` | 默认预览；仅处理允许目录中至少 7 天的旧缓存，逐文件备份及 SHA256 校验后删除 |
+| `admin_diag.py` | 只读查询 VSS、NTFS 和受保护目录；权限失败表示未知 |
+| `recycle_purge.py` | 默认仅预览；仅在明确选择执行及重复盘符后清空当前用户指定盘回收站 |
 
-1. **先扫描出清单，等用户确认，再动手** —— 所有删除操作前必须列出完整清单
-2. **先备份后删除** —— 备份到其他盘隔离区，逐文件校验一致才删源
-3. **删除后必查实际状态** —— 不信任退出码（详见 SKILL.md 的沙箱陷阱表）
-4. 专设「沙箱陷阱表」：记录 Python 删除被钩子拦截、bash rm 静默失败、Remove-Item 实际走回收站等实测坑
+缓存清理使用全新备份目录和经复核的计划 SHA256，生成可核查操作日志。无权限、锁定或发生变化的源文件会保留。文件逻辑长度与实际占用不同，报告单独记录磁盘可用空间的观测变化。
 
-详细流程与陷阱表见 [SKILL.md](SKILL.md)。
+回收站、下载、备份、安装包和应用数据需要单独判断；不会自动删除还原点、关闭保留存储或绕过安全限制。请保留其他盘备份 1–2 周。报告含本机私人路径，不应上传到公共仓库。
 
-## License
+## 验证
 
-MIT
+```powershell
+python -m unittest discover -s tests -v
+./tests/test_safe_cleanup.ps1
+```
+
+## 参考
+
+- [Microsoft：Clear-RecycleBin](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.management/clear-recyclebin)
+- [Microsoft：Reparse Points](https://learn.microsoft.com/en-us/windows/win32/fileio/reparse-points)
+- [Microsoft：NTFS 空间统计差异](https://learn.microsoft.com/en-us/troubleshoot/windows-server/backup-and-storage/disk-space-problems-on-ntfs-volumes)
+
+MIT License。
